@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Z3 Maze Solver: Man vs Machine</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <!-- Google Fonts for modern look -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Z3 Maze Solver</h1>
+            <p>Can you beat the SAT Solver?</p>
+        </header>
+
+        <div class="game-area">
+            <div class="controls">
+                <button id="new-game-btn" class="btn primary">New Game</button>
+
+                <div class="size-controls">
+                    <label>Maze Size:</label>
+                    <div class="size-buttons">
+                        <button class="btn size-btn selected" data-size="small">Small</button>
+                        <button class="btn size-btn" data-size="medium">Medium</button>
+                        <button class="btn size-btn" data-size="large">Large</button>
+                    </div>
+                </div>
+
+                <div class="depth-controls" style="margin-bottom: 15px;">
+                    <label style="color: #94a3b8; font-size: 0.9rem; display: block; margin-bottom: 5px;">Max Solver
+                        Depth:</label>
+                    <select id="solver-depth" class="btn"
+                        style="background-color: #334155; color: #cbd5e1; border: 1px solid #475569;">
+                        <option value="50">50 Steps</option>
+                        <option value="100" selected>100 Steps</option>
+                        <option value="150">150 Steps</option>
+                        <option value="200">200 Steps</option>
+                    </select>
+                </div>
+
+                <button id="add-keys-btn" class="btn secondary" style="border-color: #f59e0b; color: #f59e0b;">+ Add
+                    Keys</button>
+
+                <button id="solve-btn" class="btn secondary">Let Z3 Solve It</button>
+                <div class="stats-box">
+                    <h3>Stats</h3>
+                    <p>User Steps: <span id="user-steps">0</span></p>
+                    <p>Z3 Steps: <span id="z3-steps">-</span></p>
+                    <p>Z3 Time: <span id="z3-time">-</span>s</p>
+                    <p>Formula Size: <span id="formula-size">-</span></p>
+                </div>
+                <div class="instructions">
+                    <h3>How to Play</h3>
+                    <p>Use <strong>Arrow Keys</strong> to move the blue player to the green goal.</p>
+                </div>
+                <div id="status-message" class="status"></div>
+            </div>
+
+            <div id="maze-container" class="maze-container">
+                <!-- Maze grid will be generated here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='game.js') }}"></script>
+</body>
+
+</html>
