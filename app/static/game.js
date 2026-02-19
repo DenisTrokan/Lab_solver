@@ -193,8 +193,13 @@ function checkWin() {
 async function solveMaze() {
     if (!currentMaze) return;
 
-    // Disable add keys if not already (solver started)
+    const solveBtn = document.getElementById('solve-btn');
+
+    // Disable buttons to prevent multiple requests
     if (addKeysBtn) addKeysBtn.disabled = true;
+    solveBtn.disabled = true;
+    const originalBtnText = solveBtn.innerText;
+    solveBtn.innerText = "Solving...";
 
     const maxK = document.getElementById('solver-depth').value || 100;
 
@@ -221,6 +226,9 @@ async function solveMaze() {
     } catch (error) {
         console.error('Error solving maze:', error);
         statusDiv.innerText = 'Error solving maze.';
+    } finally {
+        solveBtn.disabled = false;
+        solveBtn.innerText = originalBtnText;
     }
 }
 
