@@ -1,5 +1,6 @@
 const mazeContainer = document.getElementById('maze-container');
 const userStepsSpan = document.getElementById('user-steps');
+const timePassedSpan = document.getElementById('time-passed');
 const z3StepsSpan = document.getElementById('z3-steps');
 const z3TimeSpan = document.getElementById('z3-time');
 const formulaSizeSpan = document.getElementById('formula-size');
@@ -10,6 +11,19 @@ let currentMaze = null;
 let playerPos = { r: 0, c: 0 };
 let userSteps = 0;
 let gameActive = false;
+
+// pathStack keeps the sequence of positions the user has moved through.  It
+// allows us to detect backtracking (moving to the previous cell) so the step
+// counter can stay the same (or even decrease) instead of always incrementing.
+let pathStack = [];
+
+let playerMovementAllowed = true;
+
+let gameStartTime = null;
+let timerId = null;
+
+let z3SolveStartTime = null;
+let z3TimerId = null;
 
 let currentSize = { width: 10, height: 10 };
 
@@ -45,12 +59,21 @@ async function newGame() {
     // Reset stats
     userSteps = 0;
     userStepsSpan.innerText = '0';
+    timePassedSpan.innerText = '0:00';
     z3StepsSpan.innerText = '-';
     z3TimeSpan.innerText = '-';
     formulaSizeSpan.innerText = '-';
     statusDiv.innerText = '';
     statusDiv.className = 'status';
     gameActive = true;
+    playerMovementAllowed = true;
+
+    // Clear any existing timer
+    if (timerId) clearInterval(timerId);
+    gameStartTime = null;
+
+    // Reset path stack (start position will be pushed once maze is loaded)
+    pathStack = [];
 
     // Enable Add Keys button for new game
     if (addKeysBtn) {
@@ -66,6 +89,10 @@ async function newGame() {
         });
         currentMaze = await response.json();
         playerPos = { r: currentMaze.start[0], c: currentMaze.start[1] };
+
+        // initialise pathStack with starting position so moves can be tracked
+        pathStack.push({ r: playerPos.r, c: playerPos.c });
+
         renderMaze();
     } catch (error) {
         console.error('Error fetching maze:', error);
@@ -143,8 +170,22 @@ function updatePlayerPosition() {
     if (cell) cell.classList.add('player');
 }
 
+function updateTimer() {
+    if (!gameStartTime) return;
+    const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
+    const minutes = Math.floor(elapsed / 60);
+    const seconds = elapsed % 60;
+    timePassedSpan.innerText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function updateZ3Timer() {
+    if (!z3SolveStartTime) return;
+    const elapsed = (Date.now() - z3SolveStartTime) / 1000;
+    z3TimeSpan.innerText = elapsed.toFixed(4);
+}
+
 function handleInput(e) {
-    if (!gameActive || !currentMaze) return;
+    if (!playerMovementAllowed || !currentMaze) return;
 
     let dr = 0, dc = 0;
     if (e.key === 'ArrowUp') dr = -1;
@@ -165,9 +206,40 @@ function handleInput(e) {
             // First move check - Disable adding keys once user starts moving
             if (userSteps === 0) {
                 if (addKeysBtn) addKeysBtn.disabled = true;
+                // Start timer on first move
+                gameStartTime = Date.now();
+                if (timerId) clearInterval(timerId);
+                timerId = setInterval(updateTimer, 100);
             }
 
-            playerPos = { r: nr, c: nc };
+            const newPos = { r: nr, c: nc };
+            const top = pathStack[pathStack.length - 1];
+
+            // Detect backtracking: moving to the previous cell in the stack
+            if (pathStack.length >= 2) {
+                const prev = pathStack[pathStack.length - 2];
+                if (nr === prev.r && nc === prev.c) {
+                    // we're stepping backwards; pop the last position and
+                    // decrement counter instead of incrementing.
+                    pathStack.pop();
+                    userSteps = Math.max(0, userSteps - 1);
+                    userStepsSpan.innerText = userSteps;
+
+                    // remove visual trail from the cell we're leaving
+                    const old = top; // this was the cell we just left
+                    const oldCell = document.getElementById(`cell-${old.r}-${old.c}`);
+                    if (oldCell) oldCell.classList.remove('user-path');
+
+                    playerPos = newPos;
+                    updatePlayerPosition();
+                    checkWin();
+                    return;
+                }
+            }
+
+            // if not backtracking, normal forward move
+            playerPos = newPos;
+            pathStack.push(newPos);
             userSteps++;
             userStepsSpan.innerText = userSteps;
             updatePlayerPosition();
@@ -183,7 +255,8 @@ function handleInput(e) {
 
 function checkWin() {
     if (playerPos.r === currentMaze.end[0] && playerPos.c === currentMaze.end[1]) {
-        gameActive = false;
+        playerMovementAllowed = false;
+        if (timerId) clearInterval(timerId);
         statusDiv.innerText = 'You Reached the Goal!';
         statusDiv.classList.add('win');
         statusDiv.classList.remove('lose');
@@ -201,6 +274,11 @@ async function solveMaze() {
     const originalBtnText = solveBtn.innerText;
     solveBtn.innerText = "Solving...";
 
+    // Clear any existing Z3 timer and start a new one
+    if (z3TimerId) clearInterval(z3TimerId);
+    z3SolveStartTime = Date.now();
+    z3TimerId = setInterval(updateZ3Timer, 100);
+
     const maxK = document.getElementById('solver-depth').value || 100;
 
     try {
@@ -210,6 +288,10 @@ async function solveMaze() {
             body: JSON.stringify({ max_k: parseInt(maxK) }) // Uses current maze on server
         });
         const result = await response.json();
+
+        // Stop the timer and display final time from server
+        if (z3TimerId) clearInterval(z3TimerId);
+        z3SolveStartTime = null;
 
         if (result.found) {
             z3StepsSpan.innerText = result.k; // or result.path.length - 1
@@ -225,6 +307,8 @@ async function solveMaze() {
 
     } catch (error) {
         console.error('Error solving maze:', error);
+        if (z3TimerId) clearInterval(z3TimerId);
+        z3SolveStartTime = null;
         statusDiv.innerText = 'Error solving maze.';
     } finally {
         solveBtn.disabled = false;
