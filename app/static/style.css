@@ -7,7 +7,7 @@
     /* Red for Z3 path */
     --accent-color: #10b981;
     /* Green for Goal */
-    --wall-color: #474b57;
+    --wall-color: #334155;
     --path-color: #1e293b;
     --overlay-color: rgba(255, 255, 255, 0.05);
 }
