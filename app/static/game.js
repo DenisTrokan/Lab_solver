@@ -6,6 +6,10 @@ const z3TimeSpan = document.getElementById('z3-time');
 const formulaSizeSpan = document.getElementById('formula-size');
 const statusDiv = document.getElementById('status-message');
 const addKeysBtn = document.getElementById('add-keys-btn');
+const viewFormulaBtn = document.getElementById('view-formula-btn');
+const formulaModal = document.getElementById('formula-modal');
+const formulaText = document.getElementById('formula-text');
+const modalCloseBtn = document.getElementById('modal-close-btn');
 
 let currentMaze = null;
 let playerPos = { r: 0, c: 0 };
@@ -25,6 +29,8 @@ let timerId = null;
 let z3SolveStartTime = null;
 let z3TimerId = null;
 
+let formulaProgressId = null;
+
 let currentSize = { width: 10, height: 10 };
 
 // Initialize
@@ -33,6 +39,26 @@ document.getElementById('solve-btn').addEventListener('click', solveMaze);
 if (addKeysBtn) {
     addKeysBtn.addEventListener('click', addKeys);
 }
+if (viewFormulaBtn) {
+    viewFormulaBtn.addEventListener('click', () => {
+        formulaModal.style.display = 'flex';
+    });
+}
+if (modalCloseBtn) {
+    modalCloseBtn.addEventListener('click', () => {
+        formulaModal.style.display = 'none';
+    });
+}
+formulaModal.addEventListener('click', (e) => {
+    if (e.target === formulaModal) {
+        formulaModal.style.display = 'none';
+    }
+});
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && formulaModal.style.display === 'flex') {
+        formulaModal.style.display = 'none';
+    }
+});
 document.addEventListener('keydown', handleInput);
 
 document.querySelectorAll('.size-btn').forEach(btn => {
@@ -72,8 +98,17 @@ async function newGame() {
     if (timerId) clearInterval(timerId);
     gameStartTime = null;
 
+    // Stop any formula polling and hide panel
+    stopFormulaPolling();
+    const formulaPanel = document.getElementById('formula-panel');
+    if (formulaPanel) formulaPanel.style.display = 'none';
+
     // Reset path stack (start position will be pushed once maze is loaded)
     pathStack = [];
+
+    // Hide formula button and close modal
+    if (viewFormulaBtn) viewFormulaBtn.style.display = 'none';
+    formulaModal.style.display = 'none';
 
     // Enable Add Keys button for new game
     if (addKeysBtn) {
@@ -184,6 +219,44 @@ function updateZ3Timer() {
     z3TimeSpan.innerText = elapsed.toFixed(4);
 }
 
+function startFormulaPolling() {
+    // Poll the formula progress endpoint every 200ms while solving
+    formulaProgressId = setInterval(async () => {
+        try {
+            const response = await fetch('/api/solve_progress');
+            const data = await response.json();
+            
+            if (data.formula) {
+                const formulaPanel = document.getElementById('formula-panel');
+                const formulaPanelText = document.getElementById('formula-panel-text');
+                const formulaLineCount = document.getElementById('formula-line-count');
+                
+                // Show the panel
+                formulaPanel.style.display = 'flex';
+                
+                // Update formula text
+                formulaPanelText.innerText = data.formula;
+                
+                // Scroll to bottom to see latest constraint
+                const formulaContent = document.getElementById('formula-panel-content');
+                formulaContent.scrollTop = formulaContent.scrollHeight;
+                
+                // Update line count
+                formulaLineCount.innerText = `${data.lines_count} lines`;
+            }
+        } catch (error) {
+            console.error('Error polling formula progress:', error);
+        }
+    }, 200);
+}
+
+function stopFormulaPolling() {
+    if (formulaProgressId) {
+        clearInterval(formulaProgressId);
+        formulaProgressId = null;
+    }
+}
+
 function handleInput(e) {
     if (!playerMovementAllowed || !currentMaze) return;
 
@@ -279,6 +352,9 @@ async function solveMaze() {
     z3SolveStartTime = Date.now();
     z3TimerId = setInterval(updateZ3Timer, 100);
 
+    // Start polling formula progress
+    startFormulaPolling();
+
     const maxK = document.getElementById('solver-depth').value || 100;
 
     try {
@@ -289,9 +365,10 @@ async function solveMaze() {
         });
         const result = await response.json();
 
-        // Stop the timer and display final time from server
+        // Stop the timer and polling
         if (z3TimerId) clearInterval(z3TimerId);
         z3SolveStartTime = null;
+        stopFormulaPolling();
 
         if (result.found) {
             z3StepsSpan.innerText = result.k; // or result.path.length - 1
@@ -299,16 +376,29 @@ async function solveMaze() {
             formulaSizeSpan.innerText = result.formula_size;
             statusDiv.innerText = 'Z3 Found a solution!';
 
+            // Display and enable formula button
+            if (result.formula) {
+                formulaText.innerText = result.formula;
+                viewFormulaBtn.style.display = 'inline-block';
+            }
+
             animateSolution(result.path);
         } else {
             statusDiv.innerText = 'Z3 says: UNSAT (No path found)';
             statusDiv.classList.add('lose');
+
+            // Still show formula for failed attempts
+            if (result.formula) {
+                formulaText.innerText = result.formula;
+                viewFormulaBtn.style.display = 'inline-block';
+            }
         }
 
     } catch (error) {
         console.error('Error solving maze:', error);
         if (z3TimerId) clearInterval(z3TimerId);
         z3SolveStartTime = null;
+        stopFormulaPolling();
         statusDiv.innerText = 'Error solving maze.';
     } finally {
         solveBtn.disabled = false;
