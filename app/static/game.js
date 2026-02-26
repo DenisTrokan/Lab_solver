@@ -1,15 +1,35 @@
 const mazeContainer = document.getElementById('maze-container');
 const userStepsSpan = document.getElementById('user-steps');
+const timePassedSpan = document.getElementById('time-passed');
 const z3StepsSpan = document.getElementById('z3-steps');
 const z3TimeSpan = document.getElementById('z3-time');
 const formulaSizeSpan = document.getElementById('formula-size');
 const statusDiv = document.getElementById('status-message');
 const addKeysBtn = document.getElementById('add-keys-btn');
+const viewFormulaBtn = document.getElementById('view-formula-btn');
+const formulaModal = document.getElementById('formula-modal');
+const formulaText = document.getElementById('formula-text');
+const modalCloseBtn = document.getElementById('modal-close-btn');
 
 let currentMaze = null;
 let playerPos = { r: 0, c: 0 };
 let userSteps = 0;
 let gameActive = false;
+
+// pathStack keeps the sequence of positions the user has moved through.  It
+// allows us to detect backtracking (moving to the previous cell) so the step
+// counter can stay the same (or even decrease) instead of always incrementing.
+let pathStack = [];
+
+let playerMovementAllowed = true;
+
+let gameStartTime = null;
+let timerId = null;
+
+let z3SolveStartTime = null;
+let z3TimerId = null;
+
+let formulaProgressId = null;
 
 let currentSize = { width: 10, height: 10 };
 
@@ -19,6 +39,26 @@ document.getElementById('solve-btn').addEventListener('click', solveMaze);
 if (addKeysBtn) {
     addKeysBtn.addEventListener('click', addKeys);
 }
+if (viewFormulaBtn) {
+    viewFormulaBtn.addEventListener('click', () => {
+        formulaModal.style.display = 'flex';
+    });
+}
+if (modalCloseBtn) {
+    modalCloseBtn.addEventListener('click', () => {
+        formulaModal.style.display = 'none';
+    });
+}
+formulaModal.addEventListener('click', (e) => {
+    if (e.target === formulaModal) {
+        formulaModal.style.display = 'none';
+    }
+});
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && formulaModal.style.display === 'flex') {
+        formulaModal.style.display = 'none';
+    }
+});
 document.addEventListener('keydown', handleInput);
 
 document.querySelectorAll('.size-btn').forEach(btn => {
@@ -45,12 +85,30 @@ async function newGame() {
     // Reset stats
     userSteps = 0;
     userStepsSpan.innerText = '0';
+    timePassedSpan.innerText = '0:00';
     z3StepsSpan.innerText = '-';
     z3TimeSpan.innerText = '-';
     formulaSizeSpan.innerText = '-';
     statusDiv.innerText = '';
     statusDiv.className = 'status';
     gameActive = true;
+    playerMovementAllowed = true;
+
+    // Clear any existing timer
+    if (timerId) clearInterval(timerId);
+    gameStartTime = null;
+
+    // Stop any formula polling and hide panel
+    stopFormulaPolling();
+    const formulaPanel = document.getElementById('formula-panel');
+    if (formulaPanel) formulaPanel.style.display = 'none';
+
+    // Reset path stack (start position will be pushed once maze is loaded)
+    pathStack = [];
+
+    // Hide formula button and close modal
+    if (viewFormulaBtn) viewFormulaBtn.style.display = 'none';
+    formulaModal.style.display = 'none';
 
     // Enable Add Keys button for new game
     if (addKeysBtn) {
@@ -66,6 +124,10 @@ async function newGame() {
         });
         currentMaze = await response.json();
         playerPos = { r: currentMaze.start[0], c: currentMaze.start[1] };
+
+        // initialise pathStack with starting position so moves can be tracked
+        pathStack.push({ r: playerPos.r, c: playerPos.c });
+
         renderMaze();
     } catch (error) {
         console.error('Error fetching maze:', error);
@@ -143,8 +205,60 @@ function updatePlayerPosition() {
     if (cell) cell.classList.add('player');
 }
 
+function updateTimer() {
+    if (!gameStartTime) return;
+    const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
+    const minutes = Math.floor(elapsed / 60);
+    const seconds = elapsed % 60;
+    timePassedSpan.innerText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function updateZ3Timer() {
+    if (!z3SolveStartTime) return;
+    const elapsed = (Date.now() - z3SolveStartTime) / 1000;
+    z3TimeSpan.innerText = elapsed.toFixed(4);
+}
+
+function startFormulaPolling() {
+    // Poll the formula progress endpoint every 200ms while solving
+    formulaProgressId = setInterval(async () => {
+        try {
+            const response = await fetch('/api/solve_progress');
+            const data = await response.json();
+            
+            if (data.formula) {
+                const formulaPanel = document.getElementById('formula-panel');
+                const formulaPanelText = document.getElementById('formula-panel-text');
+                const formulaLineCount = document.getElementById('formula-line-count');
+                
+                // Show the panel
+                formulaPanel.style.display = 'flex';
+                
+                // Update formula text
+                formulaPanelText.innerText = data.formula;
+                
+                // Scroll to bottom to see latest constraint
+                const formulaContent = document.getElementById('formula-panel-content');
+                formulaContent.scrollTop = formulaContent.scrollHeight;
+                
+                // Update line count
+                formulaLineCount.innerText = `${data.lines_count} lines`;
+            }
+        } catch (error) {
+            console.error('Error polling formula progress:', error);
+        }
+    }, 200);
+}
+
+function stopFormulaPolling() {
+    if (formulaProgressId) {
+        clearInterval(formulaProgressId);
+        formulaProgressId = null;
+    }
+}
+
 function handleInput(e) {
-    if (!gameActive || !currentMaze) return;
+    if (!playerMovementAllowed || !currentMaze) return;
 
     let dr = 0, dc = 0;
     if (e.key === 'ArrowUp') dr = -1;
@@ -165,9 +279,40 @@ function handleInput(e) {
             // First move check - Disable adding keys once user starts moving
             if (userSteps === 0) {
                 if (addKeysBtn) addKeysBtn.disabled = true;
+                // Start timer on first move
+                gameStartTime = Date.now();
+                if (timerId) clearInterval(timerId);
+                timerId = setInterval(updateTimer, 100);
             }
 
-            playerPos = { r: nr, c: nc };
+            const newPos = { r: nr, c: nc };
+            const top = pathStack[pathStack.length - 1];
+
+            // Detect backtracking: moving to the previous cell in the stack
+            if (pathStack.length >= 2) {
+                const prev = pathStack[pathStack.length - 2];
+                if (nr === prev.r && nc === prev.c) {
+                    // we're stepping backwards; pop the last position and
+                    // decrement counter instead of incrementing.
+                    pathStack.pop();
+                    userSteps = Math.max(0, userSteps - 1);
+                    userStepsSpan.innerText = userSteps;
+
+                    // remove visual trail from the cell we're leaving
+                    const old = top; // this was the cell we just left
+                    const oldCell = document.getElementById(`cell-${old.r}-${old.c}`);
+                    if (oldCell) oldCell.classList.remove('user-path');
+
+                    playerPos = newPos;
+                    updatePlayerPosition();
+                    checkWin();
+                    return;
+                }
+            }
+
+            // if not backtracking, normal forward move
+            playerPos = newPos;
+            pathStack.push(newPos);
             userSteps++;
             userStepsSpan.innerText = userSteps;
             updatePlayerPosition();
@@ -183,7 +328,8 @@ function handleInput(e) {
 
 function checkWin() {
     if (playerPos.r === currentMaze.end[0] && playerPos.c === currentMaze.end[1]) {
-        gameActive = false;
+        playerMovementAllowed = false;
+        if (timerId) clearInterval(timerId);
         statusDiv.innerText = 'You Reached the Goal!';
         statusDiv.classList.add('win');
         statusDiv.classList.remove('lose');
@@ -201,6 +347,14 @@ async function solveMaze() {
     const originalBtnText = solveBtn.innerText;
     solveBtn.innerText = "Solving...";
 
+    // Clear any existing Z3 timer and start a new one
+    if (z3TimerId) clearInterval(z3TimerId);
+    z3SolveStartTime = Date.now();
+    z3TimerId = setInterval(updateZ3Timer, 100);
+
+    // Start polling formula progress
+    startFormulaPolling();
+
     const maxK = document.getElementById('solver-depth').value || 100;
 
     try {
@@ -211,20 +365,40 @@ async function solveMaze() {
         });
         const result = await response.json();
 
+        // Stop the timer and polling
+        if (z3TimerId) clearInterval(z3TimerId);
+        z3SolveStartTime = null;
+        stopFormulaPolling();
+
         if (result.found) {
             z3StepsSpan.innerText = result.k; // or result.path.length - 1
             z3TimeSpan.innerText = result.solve_time.toFixed(4);
             formulaSizeSpan.innerText = result.formula_size;
             statusDiv.innerText = 'Z3 Found a solution!';
 
+            // Display and enable formula button
+            if (result.formula) {
+                formulaText.innerText = result.formula;
+                viewFormulaBtn.style.display = 'inline-block';
+            }
+
             animateSolution(result.path);
         } else {
             statusDiv.innerText = 'Z3 says: UNSAT (No path found)';
             statusDiv.classList.add('lose');
+
+            // Still show formula for failed attempts
+            if (result.formula) {
+                formulaText.innerText = result.formula;
+                viewFormulaBtn.style.display = 'inline-block';
+            }
         }
 
     } catch (error) {
         console.error('Error solving maze:', error);
+        if (z3TimerId) clearInterval(z3TimerId);
+        z3SolveStartTime = null;
+        stopFormulaPolling();
         statusDiv.innerText = 'Error solving maze.';
     } finally {
         solveBtn.disabled = false;

@@ -47,9 +47,11 @@
                     Keys</button>
 
                 <button id="solve-btn" class="btn secondary">Let Z3 Solve It</button>
+                <button id="view-formula-btn" class="btn secondary" style="display:none;">View Formula</button>
                 <div class="stats-box">
                     <h3>Stats</h3>
                     <p>User Steps: <span id="user-steps">0</span></p>
+                    <p>User Time: <span id="time-passed">0:00</span></p>
                     <p>Z3 Steps: <span id="z3-steps">-</span></p>
                     <p>Z3 Time: <span id="z3-time">-</span>s</p>
                     <p>Formula Size: <span id="formula-size">-</span></p>
@@ -63,6 +65,28 @@
 
             <div id="maze-container" class="maze-container">
                 <!-- Maze grid will be generated here -->
+            </div>
+        </div>
+    </div>
+
+    <div id="formula-panel" class="formula-panel" style="display:none;">
+        <div class="formula-panel-header">
+            <h4>Z3 Formula</h4>
+            <span id="formula-line-count" class="formula-count">0 lines</span>
+        </div>
+        <div id="formula-panel-content" class="formula-panel-content">
+            <pre id="formula-panel-text"></pre>
+        </div>
+    </div>
+
+    <div id="formula-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Z3 Logic Formula</h2>
+                <button class="modal-close" id="modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <pre id="formula-text"></pre>
             </div>
         </div>
     </div>
