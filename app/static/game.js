@@ -7,6 +7,9 @@ const formulaSizeSpan = document.getElementById('formula-size');
 const statusDiv = document.getElementById('status-message');
 const addKeysBtn = document.getElementById('add-keys-btn');
 const viewFormulaBtn = document.getElementById('view-formula-btn');
+const musicBtn = document.getElementById('music-btn');
+const bossMusic = document.getElementById('boss-music');
+
 const formulaModal = document.getElementById('formula-modal');
 const formulaText = document.getElementById('formula-text');
 const modalCloseBtn = document.getElementById('modal-close-btn');
@@ -15,6 +18,7 @@ let currentMaze = null;
 let playerPos = { r: 0, c: 0 };
 let userSteps = 0;
 let gameActive = false;
+let isMusicPlaying = false;
 
 // pathStack keeps the sequence of positions the user has moved through.  It
 // allows us to detect backtracking (moving to the previous cell) so the step
@@ -47,6 +51,19 @@ if (viewFormulaBtn) {
 if (modalCloseBtn) {
     modalCloseBtn.addEventListener('click', () => {
         formulaModal.style.display = 'none';
+    });
+}
+if (musicBtn) {
+    musicBtn.addEventListener('click', () => {
+        if (isMusicPlaying) {
+            bossMusic.pause();
+            musicBtn.innerHTML = '🎵 Play Music';
+            isMusicPlaying = false;
+        } else {
+            bossMusic.play().catch(error => console.log('Audio playback failed:', error));
+            musicBtn.innerHTML = '⏸️ Pause Music';
+            isMusicPlaying = true;
+        }
     });
 }
 formulaModal.addEventListener('click', (e) => {

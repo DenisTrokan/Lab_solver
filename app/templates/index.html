@@ -48,6 +48,14 @@
 
                 <button id="solve-btn" class="btn secondary">Let Z3 Solve It</button>
                 <button id="view-formula-btn" class="btn secondary" style="display:none;">View Formula</button>
+                
+                <button id="music-btn" class="btn secondary" style="border-color: #ec4899; color: #ec4899; margin-top: 10px;">
+                    🎵 Play Music
+                </button>
+                
+                <!-- Audio Element -->
+                <audio id="boss-music" src="{{ url_for('static', filename='audio/bossmusic.mp3') }}" loop></audio>
+
                 <div class="stats-box">
                     <h3>Stats</h3>
                     <p>User Steps: <span id="user-steps">0</span></p>
