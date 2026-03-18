@@ -36,6 +36,20 @@ Dove:
     *(Corrisponde alla disgiunzione delle possibili mosse)*
 4.  **Vincoli di Dominio (Muri)**: $\neg Wall(x_i, y_i)$. Nel codice:
     $$ \forall t, \forall (r,c) \in Muri, \neg (x_t = c \wedge y_t = r) $$
+5.  **Vincoli Aggiuntivi (Chiavi)**: Se presenti, è obbligatorio passare sopra le chiavi entro il tempo $k$. Per ogni chiave in $(kc, kr)$, definiamo $\Phi_{chiave}$:
+    $$ \Phi_{chiave} = \exists t \in [0, k] : (x_t = kc) \land (y_t = kr) $$
+    Che, in fase di esecuzione (il Quantificatore Esistenziale non è nativo in BMC), Z3 "srotola" in una vasta disgiunzione:
+    $$ \Phi_{chiave} = \bigvee_{t=0}^{k} (x_t = kc \land y_t = kr) $$
+    
+    **Scalare a N Chiavi (L'assenza di permutazioni):**
+    Il vero punto di forza di Z3 emerge quando abbiamo due, tre o più chiavi nella mappa. La formula completa in Z3 **non impone un ordine di raccolta**. Z3 richiede semplicemente che per *ogni singola chiave $j$* (da 1 a $C$), l'intera disgiunzione temporale $\Phi_{chiave\_j}$ valuti in *Vero*.
+
+**Formula Completa ($\Phi_k$)**
+La formula finale che passiamo al Solver Z3 per il passo $k$ è la congiunzione di tutte queste regole:
+$$ \Phi_k = I(s_0) \wedge \left( \bigwedge_{i=0}^{k-1} T(s_i, s_{i+1}) \right) \wedge \left( \bigwedge_{i=0}^{k} \neg Wall(s_i) \right) \wedge \left( \bigwedge_{j=1}^{C} \Phi_{chiave\_j} \right) \wedge G(s_k) $$
+Dove $C$ è il numero totale di chiavi nel labirinto. 
+
+Z3 risolverà questa enorme equazione trovando contemporaneamente: *quale* percorso prendere, *quando* incrociare le chiavi $t_{chiave\_1}, t_{chiave\_2} \dots t_{chiave\_C}$, e in *quale ordine* visitarle. Se l'ordine di visita più breve fosse prima la Chiave 2 e poi la Chiave 1, Z3 lo scopre autonomamente semplicemente assegnando la verità a tempi fittizi $t$, ad esempio $t_7$ per la Chiave 2 e $t_{14}$ per la Chiave 1. Nessun calcolo esplicito di permutazioni grafiche ($C!$) è necessario da parte del programmatore!
 
 Questa struttura rispecchia fedelmente la definizione di **validità di una deduzione**: se le premesse (regole del gioco) sono vere, allora la conclusione (raggiungimento del goal) deve essere derivabile.
 
@@ -50,7 +64,8 @@ L'approccio "Bounded" (limitato) cerca soluzioni incrementando la lunghezza del 
 
 Questo si collega al concetto di **Semidecidibilità** (o decidibilità per linguaggi finiti). Dato che il labirinto è finito, il diametro è limitato, quindi il processo termina sempre (è Decidibile).
 
-4.  **Ottimizzazioni del Solver (Novità)**
+4.  **Ottimizzazioni del Solver
+**
     *   **No U-Turns (Symmetry Breaking)**:
         $$ \forall t \ge 2 . \neg (x_t = x_{t-2} \wedge y_t = y_{t-2}) $$
         Impedisce cicli banali di lunghezza 2 ($A \to B \to A$), riducendo il fattore di ramificazione. In una BFS questo è implicito (non si ri-aggiunge il padre alla coda), ma in SAT va esplicitato.
