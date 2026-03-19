@@ -83,6 +83,9 @@ Questo si collega al concetto di **Semidecidibilità** (o decidibilità per ling
 *   Noi lo stiamo riducendo a SAT (che è **NP-Completo**).
 *   *Domanda d'esame*: "Perché usare un solver NP-completo per un problema P?"
     *   *Risposta*: Per la **flessibilità espressiva**. Aggiungere vincoli complessi come "passa per i checkpoint A, B, C in qualsiasi ordine" rende il problema più difficile da modellare con semplici algoritmi imperativi, ma banale per un solver logico (basta aggiungere clausole alla congiunzione).
+*   **Complessità Spaziale vs Temporale:** C'è un'asimmetria cruciale nel Bounded Model Checking visibile anche dall'output in console del programma:
+    *   **La Spaziale (Formula Size):** All'aumentare dei passi $k$, Z3 aggiunge ai propri vincoli solo le transizioni limitate allo step $k$. La grandezza materiale del testo della formula ($\Phi$) cresce quindi in modo modesto e interamente **Lineare** $\approx O(k)$.
+    *   **La Temporale (Solve Time):** Anche se la formula cresce poco (si allunga di pochissime condizioni formali), lo spazio geometrico intero-booleano per soddisfare quelle condizioni deflagra. Z3 impiega un tempo teorico **Esponenziale** nel caso peggiore ($O(2^{V \cdot k})$) per testare o calcolare i valori di verità della catena. Se un lucchetto ha 1 o 10 rotelle, la grandezza fisica della struttura cresce linearmente (poco), le combinazioni matematiche per aprirlo esplodono!
 
 ## 4. Dimostrazione Pratica (Demo)
 Durante la dimostrazione al docente mostreremo:

@@ -1,0 +1,68 @@
+0 Introduzione Formale al Problema (Sintesi Rapida)
+- L'Ambiente Fisico: Il dominio è una griglia 2D discreta composta da vuoto (0) e Ostacoli (1).
+- La Vera Sfida: L'introduzione delle "Chiavi". Costringe l'agente a un percorso di visita non ordinato, tramutando un banale problema di reachability nel cugino NP-Hard del Commesso Viaggiatore.
+- Regole Limite: Nessun moto diagonale, impossibilità matematica di collimare coi Muri (Ostacoli), 1 cella spaziale per ogni lasso Temporale (t).
+- Shift di Paradigma (Core del progetto): Abbandoniamo la stesura di logiche esplorative imperative (come la BFS o l'algoritmo A* che camminano sulla mappa in memoria). Trasformiamo le "leggi della fisica" in Gigantesche Equazioni Matematiche Booleane/Intere (SAT).
+- Tecnica BMC (Bounded Model Checking): Il solver Z3 non gioca a scacchi. Gira un Timer (K) progressivo chiedendo: "A un ipotetico passo K, posso matematicamente esistere sul check dell'Arrivo senza sfondare i vincoli ai passi interiori?". Alla prima risposta 'Vero' (SAT), otteniamo il percorso Minimo globale.
+
+1 Maze.py (La topologia "implicita" sulla Matrice)
+"All'interno del mio codice Python non ho implementato classi complesse per Nodi o Archi di un Grafo: tutto il terreno di gioco è nient'altro che una rigorosa e grezza **Matrice 2D** di Zeri e Uni."
+"Tuttavia, l'algoritmo DFS che scava la matrice crea una forma matematica molto precisa: un *Labirinto Perfetto* (che in teoria corrisponde a uno Spanning Tree). Questo significa che, fisicamente, all'interno della griglia 2D si viene a formare un unico corridoio pedonale infallibile tra due punti qualsiasi."
+
+"Per scombinare le carte, ho forzato lo script ad abbattere un 3% dei muri restanti. Geometricamente sulla matrice, questo apre dei corridoi paralleli e dei bivi che si ricongiungono in tondo (loop)."
+"Teoricamente, questo tramuta la mia griglia da un labirinto a binario unico a un vero e proprio *Grafo Ciclico implicito*. Ed è proprio questa presenza di bivi e rotonde a rendere fondamentale l'uso di Z3 rispetto a un umano: Z3 capisce da solo l'intreccio della griglia e scarta formalmente le deviazioni circolari, riportando la distanza più breve."
+2 Garantire SAT
+"Poiché l'algoritmo di generazione DFS parte dall'origine (0,0)
+e scava ricorsivamente lo spazio fino a toccare ogni cella raggiungibile,
+il mio programma garantisce by-design la raggiungibilità
+ del traguardo in assenza di chiavi."
+
+3 Dimostrazione "Passo Passo" (Esempio Griglia 5x5)
+
+"Professore, ecco matematicamente e visivamente come lo script scava un labirinto perfetto e perché la parità della griglia è fondamentale":
+
+Fase 1 (Tabula Rasa): Il codice parte con una griglia 5x5 completamente piena di muri ("1").
+[ 1  1  1  1  1 ]
+[ 1  1  1  1  1 ]
+[ 1  1  1  1  1 ]
+[ 1  1  1  1  1 ]
+[ 1  1  1  1  1 ]
+
+Fase 2 (Il Salto): Apre la partenza (0,0). La DFS guarda i vicini a 'passo 2' (saltando i muri), quindi ad esempio sfonda lateralmente fino in (0,2).
+[ 0  0  0  1  1 ]
+[ 1  1  1  1  1 ]
+[ 1  1  1  1  1 ]
+[ 1  1  1  1  1 ]
+[ 1  1  1  1  1 ]
+
+Fase 3 (Pop e Backtrack): L'algoritmo zigo-zaga frantumando matrici a blocchi di 3 quadratini orizzontali/verticali (1 casella d'arrivo + 1 perno murato disciolto in mezzo). Se finisce in un angolo cieco, svuota lo Stack e fa "backtrack" al bivio precedente.
+[ 0  0  0  1  1 ]
+[ 1  1  0  1  1 ]
+[ 1  1  0  1  1 ]
+[ 1  1  1  1  1 ]
+[ 1  1  1  1  1 ]
+
+Fase 4 (Parità perfetta e Completamento): In una matrice dispari 5x5, essendo i salti della DFS prettamente pari (indici 0 $\to$ 2 $\to$ 4), lo scavo "centrerà" inevitabilmente l'arrivo esatto in fondo all'angolo in basso a destra (4,4), connettendolo matematicamente e intersecando i bordi senza scompensi.
+[ 0  0  0  1  0 ]
+[ 0  1  0  1  0 ]
+[ 0  0  0  0  0 ]
+[ 1  1  1  1  0 ]
+[ 0  0  0  0  0 ] <- Arrivo (4,4) raggiunto e connesso con certezza!
+
+Fase 5 (Inoculazione Loop): Terminato lo Spanning Tree prototipo di base tracciabile da un umano in unico iter, il codice dovrebbe spaccare a caso un 3% dei muri restanti per generare la "gincana" in Cicli Grafo Multipli (fondamentali per far sudare davvero il Solver). Ma in un quadrato tanto lillipuziano ($25 \times 0.03 \approx 0$), non si cancellano muri residui e il livello test originario rimarrà un Albero Puramente Assoluto.
+
+"Se la griglia fosse stata Pari (es. 4 Righe $\times$ 5 Colonne), la DFS, saltando sempre di due in due la coordinata delle y, avrebbe disgraziatamente saltato a piè pari la Riga dispari 3, innescando le sconnessioni muratarie isolate di cui Z3 restituisce testualmente **UNSAT**. Ma col set Dispari, abbiamo la dimostrazione logico-costruzionistica del modello perfetto a corredo!"
+
+4 Collegamento UI - Backend (Z3)
+"Tutta la logica matematica matematica è inserita in un'architettura Client-Server logica e snella":
+
+- 1. Frontend (JS): L'interfaccia web `game.js` converte la griglia visiva in una matrice di `0` e `1`. Invia poi questa matrice assieme all'eventuale numero massimo di passi "K" (inserito a mano dall'utente) come pacchetto JSON al server.
+- 2. Backend (Flask): Il server Python `app.py` intercetta i dati. Il passaggio di spicco qui è la sicurezza su K: tramite `max_k = data.get('max_k', Base*Altezza)`, se l'utente lascia il campo vuoto, il server usa l'area intera del labirinto come limite massimo di default per evitare freeze esplosivi.
+- 3. Ritorno Z3: I parametri arrivano al `MazeSolver`. Una volta calcolato il SAT o l'UNSAT, il solver restituisce un semplice array di coordinate numeriche. Queste vengono rispedite al Frontend, che le usa come "istruzioni" per animare i passaggi dell'omino a schermo.
+
+5 Le Chiavi e il TSP (Traveling Salesman Problem)
+L'introduzione delle chiavi fa saltare la complessità del Labirinto a un livello d'esame superiore:
+
+- Da P a NP-Hard: Un labirinto vuoto si risolve in tempo Polinomiale (P). Aggiungendo $n$ chiavi sparse, dobbiamo calcolarne l'ordine di visita ottimale, riconducendo il gioco al Problema del Commesso Viaggiatore (TSP), matematicamente NP-Hard.
+- Programmazione Classica (Costo Esponenziale): Senza Z3, avremmo dovuto testare l'esplorazione incrociata per tutte le permutazioni possibili degli ordini delle chiavi ($n!$), un incubo di codice e CPU.
+- Il Vantaggio Diretto di Z3: Poiché Z3 opera nativamente in spazi di calcolo NP (SAT solver), ci è bastato un singolo vincolo: "Esiste un tempo $T$ in cui calpesti la chiave $Y$". Il parser SAT si incarica autonomamente di estrarre l'ordine di raccolta corretto senza fari scrivere algoritmi di permutazioni!

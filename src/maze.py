@@ -31,9 +31,6 @@ class Maze:
             # r = riga
             # c = colonna
             neighbors = [] # lista di vicini
-            
-            # Check neighbors (jump 2 steps) 
-            #perche viene fatto?
             directions = [(0, 2), (0, -2), (2, 0), (-2, 0)]
 
             for dr, dc in directions: 
@@ -42,9 +39,9 @@ class Maze:
                 if is_valid(nr, nc) and self.grid[nr][nc] == 1: # se la cella e valida ed e' una parete
                     neighbors.append((nr, nc, dr, dc)) # aggiunge la cella alla lista dei vicini
             
-            if neighbors:
+            if neighbors:#se ci sono vicini
                 nr, nc, dr, dc = random.choice(neighbors)
-                # Break wall between current and neighbor
+                #rimuove il muro tra la cella corrente e il vicino
                 self.grid[r + dr // 2][c + dc // 2] = 0
                 self.grid[nr][nc] = 0
                 stack.append((nr, nc))
